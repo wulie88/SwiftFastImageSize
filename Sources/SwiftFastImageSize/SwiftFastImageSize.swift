@@ -2,7 +2,6 @@ import Cocoa
 import CoreFoundation
 
 class SwiftFastImageSize {
-    var text = "Hello, World!"
 
     /// Supported image types.
     public enum ImageType: String {
@@ -10,99 +9,16 @@ class SwiftFastImageSize {
       case png
       case jpeg
       case bmp
+      case webp
       case unsupported
-    }
-
-    private struct PNGSize {
-      var width: UInt32 = 0
-      var height: UInt32 = 0
-    }
-
-    private struct GIFSize {
-      var width: UInt16 = 0
-      var height: UInt16 = 0
-    }
-    
-    /// Takes an NSData instance and returns an image type.
-    static func imageType(with data: Data) -> ImageType {
-        let sampleLength = 2
-
-        if (data.count < sampleLength) { return .unsupported }
-
-        var length = UInt16(0); (data as NSData).getBytes(&length, range: NSRange(location: 0, length: sampleLength))
-        
-        switch CFSwapInt16(length) {
-            case 0xFFD8:
-              return .jpeg
-            case 0x8950:
-              return .png
-            case 0x4749:
-              return .gif
-            default:
-              return .unsupported
-        }
-    }
-    
-    /// Takes an NSData instance and returns an image size (CGSize).
-    static func imageSize(with data: Data) -> CGSize {
-      switch self.imageType(with: data) {
-      case .png:
-        return self.sizeForPNG(with: data)
-      case .gif:
-        return self.sizeForGIF(with: data)
-      case .jpeg:
-        return self.sizeForJPEG(with: data)
-      default:
-        return CGSize.zero
-      }
-    }
-    
-    // MARK: GIF
-    
-    static func sizeForGIF(with data: Data) -> CGSize {
-      if (data.count < 11) { return CGSize.zero }
-      
-      var size = GIFSize(); (data as NSData).getBytes(&size, range: NSRange(location: 6, length: 4))
-      
-      return CGSize(width: Int(size.width), height: Int(size.height))
-    }
-    
-    // MARK: PNG
-    
-    static func sizeForPNG(with data: Data) -> CGSize {
-      if (data.count < 25) { return CGSize.zero }
-      
-      var size = PNGSize()
-      (data as NSData).getBytes(&size, range: NSRange(location: 16, length: 8))
-      
-      return CGSize(width: Int(CFSwapInt32(size.width)), height: Int(CFSwapInt32(size.height)))
-    }
-    
-    // MARK: JPEG
-    
-    static func sizeForJPEG(with data: Data) -> CGSize {
-      let offset = 2
-      var size: CGSize?
-      
-        // TODO
-      
-      return size!
-    }
-    
-    // MARK: BMP
-    
-    static func sizeForBMP(with data: Data) -> CGSize {
-        if (data.count < 25) { return CGSize.zero }
-
-      
-      return CGSize.zero
     }
     
     var path: String
     var filename: String?
     var attrs: [FileAttributeKey : Any]?
     var imageType: ImageType?
-    init(path: String) {
+    var imageSize: CGSize?
+    init(_ path: String) {
         self.path = path
         filename = URL(fileURLWithPath: path).lastPathComponent
     }
@@ -113,12 +29,95 @@ class SwiftFastImageSize {
             return
         }
         
+        guard #available(OSX 10.15, *) else {
+            return
+        }
+        
+        guard let header = try fileHandle.read(upToCount: 512) else {
+            return
+        }
+        
+        /// \211PNG\r\n\032\n
+        let png = Data([0x89, 0x50])
+        /// \377\330
+        let jpeg = Data([0xFF, 0xD8])
+        /// RIFF(?m:....)WEBP
+        let webp = "WEBP".data(using: .ascii)
+        
+        // detect image type and image size
+        if ["GIF87a".data(using: .ascii), "GIF89a".data(using: .ascii)].contains(header[0...5]) {
+            /// GIF
+            imageType = .gif
+            let s = try unpack("<HH", header[6...9])
+            imageSize = CGSize(width: s[0] as! Int, height: s[1] as! Int)
+        } else if png == header[0...1] && header[12...15] == "IHDR".data(using: .ascii) {
+            /// PNGs
+            imageType = .png
+            let s = try unpack(">LL", header[16...23])
+            imageSize = CGSize(width: s[0] as! Int, height: s[1] as! Int)
+        } else if png == header[0...1] {
+            /// older PNGs
+            imageType = .png
+            let s = try unpack(">LL", header[8...15])
+            imageSize = CGSize(width: s[0] as! Int, height: s[1] as! Int)
+        } else if jpeg == header[0...1] {
+            /// jpeg
+            imageType = .jpeg
+            try fileHandle.seek(toOffset: 0)
+            var b = try fileHandle.continueRead(2)
+            b = try fileHandle.continueRead(1)
+            while b.count > 0 && b[0] != 0xDA {
+                print("\tb and ord(b) != 0xDA:", b[0])
+                while b[0] != 0xFF {
+                    b = try fileHandle.continueRead(1)
+                    print("\t\twhile (ord(b) != 0xFF):", b[0])
+                }
+                while b[0] == 0xFF {
+                    b = try fileHandle.continueRead(1)
+                    print("\t\twhile (ord(b) == 0xFF):", b[0])
+                }
+                if b[0] >= 0xC0 && b[0] <= 0xC3 {
+                    b = try fileHandle.continueRead(3)
+                    b = try fileHandle.continueRead(4)
+                    // opposite
+                    let s = try unpack(">HH", b)
+                    imageSize = CGSize(width: s[1] as! Int, height: s[0] as! Int)
+                    break
+                } else {
+                    b = try fileHandle.continueRead(2)
+                    let s = try unpack(">H", b)
+                    let o = s[0]
+                    print("\t\to:", o, " b: [ ", b[0], b[1], " ] s: ", s)
+                    b = try fileHandle.continueRead(s[0] as! Int - 2)
+                }
+                b = try fileHandle.continueRead(1)
+            }
+        } else if webp == header[8...11] {
+            /// webp
+            imageType = .webp
+            switch header[12...15] {
+            case "VP8 ".data(using: .ascii):
+                let s = try unpack(">hh", header[26...29])
+            default:
+                // 'VP8X'
+                let s = try unpack(">lclc", header[24...29])
+            }
+        }
+        
+        print(filename!, imageType!, imageSize!, try fileHandle.offset())
+        
+        try fileHandle.close()
+    }
+}
+
+extension FileHandle {
+    func continueRead(_ count: Int) throws -> Data {
         if #available(OSX 10.15, *) {
-            let header = try fileHandle.read(upToCount: 26)
+            return try read(upToCount: count) ?? Data()
         } else {
             // Fallback on earlier versions
+            return readData(ofLength: count)
         }
-        imageType = SwiftFastImageSize.imageType(with: header)
     }
 }
 
