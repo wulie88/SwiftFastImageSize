@@ -97,10 +97,21 @@ class SwiftFastImageSize {
             imageType = .webp
             switch header[12...15] {
             case "VP8 ".data(using: .ascii):
-                let s = try unpack(">hh", header[26...29])
+                let s = try unpack("<HH", header[26...29])
+                imageSize = CGSize(width: s[0] as! Int, height: s[1] as! Int)
+            case "VP8L".data(using: .ascii):
+                let s = try unpack("<l", header[21...24])
+                let n = s[0] as! Int
+                let w = (n & 0x3fff) + 1
+                let h = (n >> 14 & 0x3fff) + 1
+                imageSize = CGSize(width: w, height: h)
             default:
                 // 'VP8X'
-                let s = try unpack(">lclc", header[24...29])
+                let s = try unpack("<HBHB", header[24...29])
+                let w16 = s[0] as! Int, w8 = s[1] as! Int, h16 = s[2] as! Int, h8 = s[3] as! Int
+                let w = (w16 | w8 << 16) + 1
+                let h = (h16 | h8 << 16) + 1
+                imageSize = CGSize(width: w, height: h)
             }
         }
         
