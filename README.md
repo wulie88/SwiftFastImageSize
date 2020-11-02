@@ -9,6 +9,23 @@
 1. 无需加载整个文件
 2. 支持bmp/jpg/png/apng/gif/webp
 
+
+## 示例代码
+
+完整示例代码在`Tests`中
+
+```Swift
+let sizer = SwiftFastImageSize(path)
+do {
+    try sizer.parse()
+    XCTAssertEqual(sizer.imageType, type)
+    XCTAssertEqual(sizer.imageSize, size)
+} catch let error {
+    print("error", error)
+}
+```
+
+
 ## 最佳实践
 
 1. 通过`SwiftFastImageSize`获得全部图片的图片尺寸，用于布局计算；
