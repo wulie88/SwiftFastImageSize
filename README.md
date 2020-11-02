@@ -1,5 +1,7 @@
 # SwiftFastImageSize
 
+[Github地址](https://github.com/wulie88/SwiftFastImageSize)
+
 > 快速获得图片类型及尺寸大小
 
 只加载图片文件头就可以通过协议确定图片类型及尺寸，用于本地图片（后续加入远程）列表展示，特别适合需要根据图片尺寸动态布局的视图，如`CollectionView`等瀑布流布局/自适应布局。
