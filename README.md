@@ -2,13 +2,20 @@
 
 [Github地址](https://github.com/wulie88/SwiftFastImageSize)
 
+To swiftly determine image type and dimensions, a method that parses only the header of the image file can be utilized, allowing identification of the image format and size without loading the entire file. This technique is initially designed for local images (with future support for remote images) and is particularly beneficial for scenarios requiring dynamic layout adjustments based on image dimensions, such as the display of images in CollectionView with waterfall or adaptive layouts.
+
+Technical Advantages:
+
+Only the file header needs to be loaded, making it efficient even with large files.
+Supports formats including BMP, JPG, PNG, APNG, GIF, and WebP.
+
 > 快速获得图片类型及尺寸大小
 
 只加载图片文件头就可以通过协议确定图片类型及尺寸，用于本地图片（后续加入远程）列表展示，特别适合需要根据图片尺寸动态布局的视图，如`CollectionView`等瀑布流布局/自适应布局。
 
 ## 技术优势
 
-1. 无需加载整个文件
+1. 只需要加载文件头部，无惧大文件
 2. 支持bmp/jpg/png/apng/gif/webp
 
 
